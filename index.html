@@ -123,11 +123,20 @@
             const sep = RETURN_URL.includes('?') ? '&' : '?';
             const target = RETURN_URL + sep + 'qr=' + encodeURIComponent(code);
 
-            html5QrCode.stop().then(() => {
-                window.location.href = target;
-            }).catch(() => {
-                window.location.href = target;
-            });
+            const navigateBack = () => {
+                try {
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.location.href = target;
+                        window.close();
+                    } else {
+                        window.location.href = target;
+                    }
+                } catch (e) {
+                    window.location.href = target;
+                }
+            };
+
+            html5QrCode.stop().then(navigateBack).catch(navigateBack);
         }
 
         function showResult(res) {
