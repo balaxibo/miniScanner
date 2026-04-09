@@ -148,17 +148,10 @@ async function init() {
       `<option value="${d.id}">${d.label || d.id}</option>`
     ).join("");
     if (devices && devices.length > 0) {
-      const ua = navigator.userAgent || "";
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-      let backCam = devices.find(d => (d.label || "").toLowerCase().includes("back") || (d.label || "").toLowerCase().includes("rear"));
-      if (!backCam && isMobile && devices.length > 1) {
-        backCam = devices[devices.length - 1];
-      }
-      currentCameraId = (backCam && backCam.id) ? backCam.id : devices[0].id;
+      currentCameraId = devices[0].id;
     }
     setScanButtonState();
-    // Tự động bật camera lần đầu để trình duyệt hiện dialog xin quyền
-    await startScanner();
+    setStatus("Nhấn BẬT CAMERA để quét", "processing");
   } catch (err) {
     setStatus("Lỗi camera: " + err.message, "err");
   }
@@ -180,7 +173,7 @@ async function startScanner(cameraId) {
     setScanButtonState();
     setStatus("Đưa mã QR vào khung để quét...", "ok");
   } catch (err) {
-    const devices = await Html5Qrcode.getCameras();
+    const devices = await Html5QrCode.getCameras();
     if (devices && devices.length > 0) {
       await html5QrCode.start(devices[0].id, { fps: 10 }, onScan);
     } else {
@@ -343,23 +336,11 @@ function handleResult(code, res) {
 function setStatus(msg, type) {
   const el = document.getElementById("statusMsg");
   el.innerText = msg;
-  let cls = "font-bold text-xl ";
+  let cls = "font-bold text-lg ";
   if (type === "ok") cls += "ok";
   else if (type === "err") cls += "err";
   else cls += "processing";
   el.className = cls;
-}
-
-function setScanButtonState() {
-  const btn = document.getElementById("scanToggleBtn");
-  if (!btn) return;
-  if (isScanning) {
-    btn.textContent = "DỪNG QUÉT";
-    btn.className = "flex-1 bg-red-600 text-[11px] text-white px-3 py-2 rounded-md font-bold";
-  } else {
-    btn.textContent = "BẬT CAMERA QUÉT QR";
-    btn.className = "flex-1 bg-emerald-600 text-[11px] text-white px-3 py-2 rounded-md font-bold";
-  }
 }
 
 function beep() {
