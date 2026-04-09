@@ -111,15 +111,20 @@ async function startScanner(cameraId) {
       fps: 15,
       qrbox: { width: 220, height: 220 }
     };
-    let camId = cameraId || currentCameraId;
-    if (camId) {
-      try {
-        await html5QrCode.start(camId, config, onScan);
-      } catch (e) {
-        await html5QrCode.start({ facingMode: "environment" }, config, onScan);
-      }
+    if (cameraId) {
+      await html5QrCode.start(cameraId, config, onScan);
     } else {
-      await html5QrCode.start({ facingMode: "environment" }, config, onScan);
+      try {
+        await html5QrCode.start({ facingMode: "environment" }, config, onScan);
+      } catch (e) {
+        const devices = await Html5QrCode.getCameras();
+        if (devices && devices.length > 0) {
+          await html5QrCode.start(devices[0].id, config, onScan);
+        } else {
+          setStatus("Không tìm thấy camera", "err");
+          return;
+        }
+      }
     }
     isScanning = true;
     setScanButtonState();
