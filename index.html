@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>ALY GYM - STANDALONE SCANNER</title>
+    <title>ALY GYM - MINI QR SCANNER</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -18,7 +18,6 @@
 </head>
 <body class="min-h-screen flex flex-col p-4 max-w-lg mx-auto">
 
-    <!-- Header -->
     <header class="flex justify-between items-center mb-6">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
@@ -32,17 +31,7 @@
         <button onclick="location.reload()" class="glass p-3 rounded-xl"><i class="fas fa-sync-alt text-gray-400"></i></button>
     </header>
 
-    <!-- Configuration (API URL) -->
-    <div id="configSection" class="glass p-6 rounded-3xl mb-6">
-        <h2 class="font-bold text-sm mb-4 text-gray-400 uppercase tracking-widest">Cấu hình kết nối (API)</h2>
-        <input type="text" id="apiUrl" placeholder="Dán link Web App (/exec) vào đây..." 
-               class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-xs outline-none focus:border-green-500 transition-all mb-4">
-        <button onclick="saveConfig()" class="w-full bg-green-600 py-4 rounded-2xl font-bold active:scale-95 transition-all">LƯU CẤU HÌNH</button>
-        <p class="mt-3 text-[10px] text-gray-500 italic">Dùng link Web App kết thúc bằng /exec</p>
-    </div>
-
-    <!-- Scanner Section -->
-    <main id="scannerSection" class="hidden flex-1 flex flex-col gap-6">
+    <main id="scannerSection" class="flex-1 flex flex-col gap-6">
         <div class="relative glass rounded-[2.5rem] p-2 shadow-2xl aspect-square overflow-hidden border-2 border-gray-800">
             <div id="reader"></div>
             <div id="scannerOverlay" class="absolute inset-0 pointer-events-none z-20">
@@ -65,7 +54,6 @@
         </div>
     </main>
 
-    <!-- Result Modal -->
     <div id="resultModal" class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
         <div id="resultCard" class="w-full max-w-sm glass rounded-[3rem] p-8 transform scale-90 transition-all duration-300">
             <div id="resIcon" class="w-20 h-20 rounded-3xl mx-auto flex items-center justify-center text-3xl mb-6 shadow-2xl"></div>
@@ -79,37 +67,29 @@
     <script>
         let html5QrCode = null;
         let isProcessing = false;
-        let API_URL = localStorage.getItem('aly_gym_api_url');
+        let RETURN_URL = null;
 
         window.onload = () => {
-            if (API_URL) {
-                document.getElementById('configSection').classList.add('hidden');
-                document.getElementById('scannerSection').classList.remove('hidden');
-                initScanner();
+            const params = new URLSearchParams(window.location.search);
+            const ret = params.get('return');
+            if (ret && ret.trim() !== '') {
+                RETURN_URL = ret;
             }
+            initScanner();
         };
-
-        function saveConfig() {
-            const url = document.getElementById('apiUrl').value.trim();
-            if (!url.includes('/exec')) {
-                alert('Vui lòng nhập link Web App chính xác (/exec)');
-                return;
-            }
-            localStorage.setItem('aly_gym_api_url', url);
-            location.reload();
-        }
 
         async function initScanner() {
             try {
                 const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length > 0) {
-                    const select = document.getElementById('cameraSelect');
-                    select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label}</option>`).join('');
-                    
-                    html5QrCode = new Html5Qrcode("reader");
-                    const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
-                    startScanning(backCamera ? backCamera.id : devices[0].id);
+                if (!devices || devices.length === 0) {
+                    document.getElementById('statusMsg').innerText = 'Không tìm thấy camera.';
+                    return;
                 }
+                const select = document.getElementById('cameraSelect');
+                select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label}</option>`).join('');
+                html5QrCode = new Html5Qrcode("reader");
+                const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
+                startScanning(backCamera ? backCamera.id : devices[0].id);
             } catch (err) {
                 alert('Lỗi Camera: ' + err.message);
             }
@@ -117,6 +97,7 @@
 
         async function startScanning(cameraId) {
             await html5QrCode.start(cameraId, { fps: 20, qrbox: 250 }, onScanSuccess);
+            document.getElementById('statusMsg').innerText = 'Đưa mã QR vào khung để quét...';
         }
 
         async function switchCamera(id) {
@@ -127,23 +108,25 @@
         function onScanSuccess(decodedText) {
             if (isProcessing) return;
             const code = decodedText.trim().toUpperCase();
-            if (!/^(AG|APT)\d+$/i.test(code)) return;
-
+            if (!/^(AG|APT)\d+$/i.test(code)) {
+                document.getElementById('statusMsg').innerText = 'Mã không hợp lệ: ' + code;
+                return;
+            }
+            if (!RETURN_URL) {
+                showResult({ status: 'error', message: 'Thiếu tham số return trong URL. Hãy mở scanner từ hệ thống ALY GYM.' });
+                return;
+            }
             isProcessing = true;
             if (navigator.vibrate) navigator.vibrate(100);
-            document.getElementById('statusMsg').innerText = 'Đang gửi dữ liệu: ' + code;
+            document.getElementById('statusMsg').innerText = 'Đã đọc mã: ' + code + ' - Đang chuyển về hệ thống...';
 
-            fetch(API_URL, {
-                method: 'POST',
-                mode: 'no-cors', // Dùng no-cors để gửi request nhanh
-                body: JSON.stringify({ studentId: code })
-            }).then(() => {
-                // Vì no-cors không đọc được response, ta đợi 1s rồi gọi API GET để lấy kết quả hoặc cứ báo thành công
-                // Cách tối ưu nhất cho Standalone là dùng GET nếu API hỗ trợ hoặc dùng Proxy
-                // Để đơn giản nhất cho người dùng:
-                showResult({ status: 'success', fullName: 'Đã gửi yêu cầu', studentId: code, message: 'Đã điểm danh thành công!' });
-            }).catch(err => {
-                showResult({ status: 'error', message: 'Lỗi kết nối: ' + err.message });
+            const sep = RETURN_URL.includes('?') ? '&' : '?';
+            const target = RETURN_URL + sep + 'qr=' + encodeURIComponent(code);
+
+            html5QrCode.stop().then(() => {
+                window.location.href = target;
+            }).catch(() => {
+                window.location.href = target;
             });
         }
 
