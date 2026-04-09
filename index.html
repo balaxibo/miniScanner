@@ -88,7 +88,12 @@
                 const select = document.getElementById('cameraSelect');
                 select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label}</option>`).join('');
                 html5QrCode = new Html5Qrcode("reader");
-                const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
+                const ua = navigator.userAgent || '';
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+                let backCamera = devices.find(d => (d.label || '').toLowerCase().includes('back') || (d.label || '').toLowerCase().includes('rear'));
+                if (!backCamera && isMobile && devices.length > 1) {
+                    backCamera = devices[devices.length - 1];
+                }
                 startScanning(backCamera ? backCamera.id : devices[0].id);
             } catch (err) {
                 alert('Lỗi Camera: ' + err.message);
