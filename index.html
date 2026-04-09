@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>ALY GYM - MINI QR SCANNER</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+<title>ALY GYM - MINI QR SCANNER</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
 body {
   background: #020617;
   font-family: 'Inter', sans-serif;
@@ -25,7 +26,6 @@ body {
   object-fit: cover;
 }
 
-/* KHUNG QUÉT POS */
 .scan-frame {
   position: absolute;
   width: 70%;
@@ -35,7 +35,6 @@ body {
   box-shadow: 0 0 30px rgba(34,197,94,0.6);
 }
 
-/* 4 góc kiểu POS */
 .corner {
   position: absolute;
   width: 25px;
@@ -48,7 +47,6 @@ body {
 .corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
 .corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
 
-/* scan line */
 .scan-line {
   position: absolute;
   width: 100%;
@@ -63,7 +61,6 @@ body {
   100% { top: 100%; }
 }
 
-/* overlay tối xung quanh */
 .overlay {
   position: absolute;
   inset: 0;
@@ -73,18 +70,17 @@ body {
   justify-content: center;
 }
 
-/* status bar */
 .status-bar {
   background: #020617;
   border-top: 1px solid #1e293b;
 }
 
-/* trạng thái */
 .ok { color: #22c55e; }
 .err { color: #ef4444; }
 .processing { color: #3b82f6; }
 </style>
 </head>
+
 <body class="flex flex-col h-screen">
 
 <!-- CAMERA -->
@@ -102,7 +98,7 @@ body {
   </div>
 </div>
 
-<!-- STATUS POS -->
+<!-- STATUS -->
 <div class="status-bar p-4">
 
   <div class="flex justify-between items-center">
@@ -122,7 +118,7 @@ body {
 
 </div>
 
-    <script>
+<script>
 let html5QrCode;
 let isProcessing = false;
 let lastQR = "";
@@ -131,7 +127,10 @@ let RETURN_URL = null;
 
 window.onload = () => {
   const params = new URLSearchParams(location.search);
-  RETURN_URL = params.get("return");
+
+  // 🔥 FIX 404
+  const ret = params.get("return");
+  RETURN_URL = ret ? decodeURIComponent(ret) : null;
 
   init();
 };
@@ -146,11 +145,23 @@ async function init() {
     `<option value="${d.id}">${d.label}</option>`
   ).join("");
 
+  // 🔥 FIX CAMERA iPhone
+  let cameraId;
+
   const back = devices.find(d =>
-    d.label.toLowerCase().includes("back")
+    d.label.toLowerCase().includes("back") ||
+    d.label.toLowerCase().includes("rear")
   );
 
-  start(back ? back.id : devices[0].id);
+  if (back) {
+    cameraId = back.id;
+  } else if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    cameraId = devices[devices.length - 1].id;
+  } else {
+    cameraId = devices[0].id;
+  }
+
+  start(cameraId);
 }
 
 async function start(id) {
@@ -186,10 +197,19 @@ function onScan(text) {
     return;
   }
 
-  const url = RETURN_URL + (RETURN_URL.includes("?") ? "&" : "?") + "qr=" + text;
+  // 🔥 FIX encode QR
+  const url = RETURN_URL + (RETURN_URL.includes("?") ? "&" : "?") + "qr=" + encodeURIComponent(text);
 
   setTimeout(() => {
-    window.location.href = url;
+
+    // 🔥 FIX redirect chuẩn
+    if (window.opener && !window.opener.closed) {
+      window.opener.location.href = url;
+      window.close();
+    } else {
+      window.location.href = url;
+    }
+
   }, 500);
 }
 
@@ -209,5 +229,6 @@ document.getElementById("cameraSelect")?.addEventListener("change", async (e) =>
   start(e.target.value);
 });
 </script>
+
 </body>
 </html>
