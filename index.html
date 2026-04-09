@@ -6,6 +6,7 @@
 <title>ALY GYM - MINI QR SCANNER</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#020617">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -21,39 +22,24 @@ body { background: #020617; font-family: 'Inter', sans-serif; }
 
 .scan-frame {
   position: absolute;
-  width: 58%;
-  height: 58%;
+  width: 55%;
+  height: 55%;
   border: 3px solid #22c55e;
-  border-radius: 20px;
-  box-shadow: 0 0 25px rgba(34,197,94,0.5);
+  border-radius: 16px;
+  box-shadow: 0 0 20px rgba(34,197,94,0.4);
 }
 
 .corner {
   position: absolute;
-  width: 25px;
-  height: 25px;
-  border: 4px solid #22c55e;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #22c55e;
 }
 
 .corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
 .corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
 .corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
 .corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
-
-.scan-line {
-  position: absolute;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg,#22c55e,#bbf7d0);
-  animation: scan 1.8s linear infinite;
-}
-
-@keyframes scan {
-  0% { top: 5%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { top: 95%; opacity: 0; }
-}
 
 .overlay {
   position: absolute;
@@ -87,32 +73,40 @@ body { background: #020617; font-family: 'Inter', sans-serif; }
       <div class="corner tr"></div>
       <div class="corner bl"></div>
       <div class="corner br"></div>
-      <div class="scan-line"></div>
     </div>
   </div>
 </div>
 
-<div class="status-bar p-3 space-y-2">
-  <div class="flex justify-between items-center">
-    <div>
-      <div class="text-xs text-gray-400">TRẠNG THÁI</div>
-      <div id="statusMsg" class="font-bold text-xl ok">Đang khởi động...</div>
-    </div>
-    <select id="cameraSelect" class="bg-gray-800 text-white text-xs px-3 py-2 rounded-md"></select>
+<div class="status-bar p-3 space-y-3">
+
+  <!-- STATUS -->
+  <div id="statusMsg" class="text-center font-extrabold text-2xl ok">
+    Sẵn sàng
   </div>
-  <div class="flex justify-between items-center gap-2">
-    <button id="scanToggleBtn" class="flex-1 bg-emerald-600 text-[11px] text-white px-3 py-2 rounded-md font-bold">
-      BẬT CAMERA QUÉT QR
-    </button>
-    <button id="aptModeBtn" class="bg-gray-900 text-[11px] text-emerald-300 px-3 py-2 rounded-md border border-emerald-500/40">
-      APT: PT
-    </button>
-    <button id="backBtn" class="bg-gray-900 text-[11px] text-gray-300 px-3 py-2 rounded-md border border-gray-600/60">
-      VỀ WEB APP
-    </button>
-  </div>
-  <div id="lastScan" class="text-xs text-gray-400 mt-1 min-h-[18px]">
+
+  <!-- RESULT -->
+  <div id="lastScan" class="text-sm text-gray-300 text-center min-h-[20px]">
     Chưa có dữ liệu
+  </div>
+
+  <!-- BUTTONS -->
+  <div class="grid grid-cols-3 gap-2">
+
+    <button id="scanToggleBtn"
+      class="bg-emerald-600 text-white py-3 rounded-lg font-bold text-sm">
+      BẬT CAMERA
+    </button>
+
+    <button id="aptModeBtn"
+      class="bg-gray-900 text-emerald-300 py-3 rounded-lg border border-emerald-500/40 text-sm font-bold">
+      PT
+    </button>
+
+    <button id="backBtn"
+      class="bg-gray-900 text-gray-300 py-3 rounded-lg border border-gray-600 text-sm font-bold">
+      THOÁT
+    </button>
+
   </div>
 </div>
 
@@ -125,7 +119,6 @@ let API_BASE = null;
 let aptMode = "PT";
 let fullReturnUrl = null;
 let isScanning = false;
-let currentCameraId = null;
 
 window.addEventListener("load", init);
 
@@ -142,107 +135,67 @@ async function init() {
 
   try {
     html5QrCode = new Html5Qrcode("reader");
-    const devices = await Html5Qrcode.getCameras();
-    const select = document.getElementById("cameraSelect");
-    select.innerHTML = devices.map(d =>
-      `<option value="${d.id}">${d.label || d.id}</option>`
-    ).join("");
-    if (devices && devices.length > 0) {
-      currentCameraId = devices[0].id;
-    }
     setScanButtonState();
-    setStatus("Nhấn BẬT CAMERA để quét", "processing");
+    setStatus("Nhấn BẬT CAMERA", "processing");
   } catch (err) {
-    setStatus("Lỗi camera: " + err.message, "err");
+    setStatus("Lỗi camera", "err");
   }
 }
 
-async function startScanner(cameraId) {
+async function startScanner() {
   try {
-    const config = {
-      fps: 15,
-      qrbox: { width: 220, height: 220 }
-    };
-    const camId = cameraId || currentCameraId;
-    if (camId) {
-      await html5QrCode.start(camId, config, onScan);
-    } else {
-      await html5QrCode.start({ facingMode: "environment" }, config, onScan);
-    }
+    await html5QrCode.start(
+      { facingMode: "environment" }, // 🔥 luôn camera sau
+      {
+        fps: 10,
+        qrbox: { width: 180, height: 180 },
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+      },
+      onScan
+    );
+
     isScanning = true;
     setScanButtonState();
-    setStatus("Đưa mã QR vào khung để quét...", "ok");
+    setStatus("Đang quét...", "ok");
+
   } catch (err) {
-    const devices = await Html5QrCode.getCameras();
-    if (devices && devices.length > 0) {
-      await html5QrCode.start(devices[0].id, { fps: 10 }, onScan);
-    } else {
-      setStatus("Không tìm thấy camera", "err");
-    }
+    setStatus("Không mở được camera", "err");
   }
 }
 
 async function stopScanner(auto = false) {
   if (!html5QrCode || !isScanning) return;
-  try {
-    await html5QrCode.stop();
-  } catch (e) {}
+
+  try { await html5QrCode.stop(); } catch (e) {}
+
   isScanning = false;
   setScanButtonState();
-  if (!auto) {
-    setStatus("Đã tắt camera", "processing");
-  }
+
+  if (!auto) setStatus("Đã tắt camera", "processing");
 }
 
-async function switchCamera(id) {
-  if (!html5QrCode) return;
-  try {
-    await html5QrCode.stop();
-  } catch (e) {}
-  currentCameraId = id;
-  if (isScanning) {
-    await startScanner(id);
-  }
-}
+document.getElementById("scanToggleBtn").onclick = async () => {
+  if (isScanning) await stopScanner(false);
+  else await startScanner();
+};
 
-document.getElementById("cameraSelect").addEventListener("change", function (e) {
-  switchCamera(e.target.value);
-});
-
-document.getElementById("scanToggleBtn").addEventListener("click", async function () {
-  if (isScanning) {
-    await stopScanner(false);
-  } else {
-    await startScanner();
-  }
-});
-
-document.getElementById("aptModeBtn").addEventListener("click", function () {
+document.getElementById("aptModeBtn").onclick = function () {
   aptMode = aptMode === "PT" ? "OutOfHours" : "PT";
-  this.textContent = "APT: " + (aptMode === "PT" ? "PT" : "Ngoài giờ");
-});
+  this.textContent = aptMode === "PT" ? "PT" : "NGOÀI GIỜ";
+};
 
-document.getElementById("backBtn").addEventListener("click", function () {
-  if (fullReturnUrl) {
-    if (window.opener && !window.opener.closed) {
-      window.opener.location.href = fullReturnUrl;
-      window.close();
-    } else {
-      window.location.href = fullReturnUrl;
-    }
-  }
-});
+document.getElementById("backBtn").onclick = function () {
+  if (fullReturnUrl) window.location.href = fullReturnUrl;
+};
 
 function onScan(text) {
   const now = Date.now();
   const code = String(text || "").trim().toUpperCase();
 
-  if (isProcessing) return;
-  if (code === lastQR && now - lastTime < 1500) return;
+  if (isProcessing || (code === lastQR && now - lastTime < 1500)) return;
 
   if (!/^(AG|APT)\d+$/i.test(code)) {
-    setStatus("Mã không hợp lệ: " + code, "err");
-    document.getElementById("lastScan").innerText = code;
+    setStatus("QR không hợp lệ", "err");
     return;
   }
 
@@ -251,102 +204,75 @@ function onScan(text) {
   isProcessing = true;
 
   beep();
-  setStatus("Đang xử lý " + code + "...", "processing");
+  setStatus("Đang xử lý...", "processing");
   document.getElementById("lastScan").innerText = code;
 
-  if (!API_BASE) {
-    setStatus("Thiếu API_BASE", "err");
-    isProcessing = false;
-    return;
-  }
-
-  let trainingType = "NonPT";
-  if (/^APT/i.test(code)) {
-    trainingType = aptMode;
-  }
+  let trainingType = /^APT/i.test(code) ? aptMode : "NonPT";
 
   callApi(code, trainingType);
 }
 
 function callApi(code, trainingType) {
-  const cbName = "handle_" + Date.now();
+  const cbName = "cb_" + Date.now();
+
   window[cbName] = function (res) {
-    try {
-      handleResult(code, res);
-    } finally {
-      delete window[cbName];
-      setTimeout(function () {
-        isProcessing = false;
-      }, 400);
-    }
+    delete window[cbName];
+    handleResult(code, res);
+    isProcessing = false;
   };
 
-  const url = API_BASE
-    + "?mode=api"
-    + "&code=" + encodeURIComponent(code)
-    + "&trainingType=" + encodeURIComponent(trainingType)
-    + "&callback=" + encodeURIComponent(cbName)
-    + "&ts=" + Date.now();
+  const url = API_BASE +
+    "?mode=api&code=" + code +
+    "&trainingType=" + trainingType +
+    "&callback=" + cbName;
 
   const s = document.createElement("script");
   s.src = url;
-  s.onerror = function () {
-    setStatus("Không kết nối được máy chủ", "err");
-    isProcessing = false;
-  };
   document.body.appendChild(s);
 }
 
 function handleResult(code, res) {
-  if (!res || typeof res !== "object") {
-    setStatus("Dữ liệu không hợp lệ", "err");
-    return;
-  }
+  if (!res) return setStatus("Lỗi dữ liệu", "err");
 
-  const name = res.fullName || "";
-  const pkg = res.packageCode || "";
-  const remain = res.remainingSessions != null ? res.remainingSessions : "";
-  const endDate = res.endDate || "";
-  const expired = !!res.isExpired;
-  const status = res.status || "";
-  const msg = res.message || "";
-
-  if (status === "success") {
-    setStatus("✅ " + name, "ok");
-  } else if (status === "info" && msg.indexOf("Đã điểm danh hôm nay") >= 0) {
-    setStatus("✅ Đã điểm danh hôm nay", "today");
-  } else if (status === "info") {
-    setStatus("ℹ️ " + msg, "processing");
+  if (res.status === "success") {
+    setStatus("✅ " + res.fullName, "ok");
+    flash("#022c22");
   } else {
-    setStatus(msg || "Lỗi", "err");
+    setStatus(res.message || "Lỗi", "err");
+    flash("#450a0a");
   }
 
-  const info = [];
-  info.push("Mã: " + code);
-  if (name) info.push("Tên: " + name);
-  if (pkg) info.push("Gói: " + pkg);
-  if (remain !== "") info.push("Buổi còn: " + remain);
-  if (endDate) info.push("Hạn: " + endDate);
-  info.push("Thẻ: " + (expired ? "Hết hạn" : "Còn hạn"));
+  document.getElementById("lastScan").innerText =
+    `Mã: ${code} | ${res.fullName || ""}`;
 
-  document.getElementById("lastScan").innerText = info.join(" | ");
-  stopScanner(true);
+  stopScanner(true); // 🔥 tự tắt sau scan
+}
+
+function setScanButtonState() {
+  const btn = document.getElementById("scanToggleBtn");
+
+  if (isScanning) {
+    btn.innerText = "TẮT CAMERA";
+    btn.classList.replace("bg-emerald-600", "bg-red-600");
+  } else {
+    btn.innerText = "BẬT CAMERA";
+    btn.classList.replace("bg-red-600", "bg-emerald-600");
+  }
 }
 
 function setStatus(msg, type) {
   const el = document.getElementById("statusMsg");
   el.innerText = msg;
-  let cls = "font-bold text-lg ";
-  if (type === "ok") cls += "ok";
-  else if (type === "err") cls += "err";
-  else cls += "processing";
-  el.className = cls;
+  el.className = "text-center font-extrabold text-2xl " + type;
+}
+
+function flash(color) {
+  document.body.style.background = color;
+  setTimeout(() => document.body.style.background = "#020617", 250);
 }
 
 function beep() {
-  try {
-    new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play();
-  } catch (e) {}
+  try { new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play(); } catch(e){}
   if (navigator.vibrate) navigator.vibrate(80);
 }
 </script>
