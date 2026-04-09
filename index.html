@@ -108,28 +108,28 @@ let html5QrCode;
 let isProcessing = false;
 let lastQR = "";
 let lastTime = 0;
-let RETURN_URL = null;
+
+// 🔥 API GAS (THAY LINK CỦA BẠN)
+const API_URL = "https://script.google.com/macros/s/AKfycbyCHuK3vgm301o_atx3nkPXiEyKU6Bru8zSAV515m97AZrZptDqtQmtEEydUE3jQ-qb/exec";
 
 window.onload = async () => {
-  const params = new URLSearchParams(location.search);
-  const ret = params.get("return");
-  RETURN_URL = ret ? decodeURIComponent(ret) : null;
-
   await init();
 };
 
+// ===== INIT =====
 async function init() {
   try {
     html5QrCode = new Html5Qrcode("reader");
 
-    const devices = await Html5Qrcode.getCameras();
-
-    const select = document.getElementById("cameraSelect");
-    select.innerHTML = devices.map(d =>
-      `<option value="${d.id}">${d.label}</option>`
-    ).join("");
-
-    start(); // dùng facingMode
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      {
+        fps: 25, // ⚡ tăng tốc
+        qrbox: { width: 200, height: 200 },
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] // 🔥 chỉ QR → nhanh hơn
+      },
+      onScan
+    );
 
     setStatus("Sẵn sàng quét", "ok");
 
@@ -138,75 +138,96 @@ async function init() {
   }
 }
 
-async function start() {
-  try {
-    await html5QrCode.start(
-      { facingMode: "environment" }, // 🔥 fix iPhone 3 camera
-      {
-        fps: 20,
-        qrbox: { width: 220, height: 220 }
-      },
-      onScan
-    );
-  } catch (err) {
-    console.log("Fallback cameraId");
-
-    const devices = await Html5Qrcode.getCameras();
-    await html5QrCode.start(devices[0].id, { fps: 10 }, onScan);
-  }
-}
-
+// ===== SCAN =====
 function onScan(text) {
   const now = Date.now();
 
-  if (isProcessing || (text === lastQR && now - lastTime < 800)) return;
+  if (isProcessing || (text === lastQR && now - lastTime < 700)) return;
 
   lastQR = text;
   lastTime = now;
   isProcessing = true;
 
+  // ⚡ tắt animation → tăng FPS thực
+  document.querySelector(".scan-line").style.display = "none";
+
   beep();
-  setStatus("Đang xử lý...", "processing");
+  setStatus("Đang kiểm tra...", "processing");
 
   document.getElementById("lastScan").innerText = text;
 
-  if (!RETURN_URL) {
-    setStatus("Thiếu return URL", "err");
-    isProcessing = false;
-    return;
-  }
-
-  const url = RETURN_URL + (RETURN_URL.includes("?") ? "&" : "?") +
-    "qr=" + encodeURIComponent(text);
-
-  redirect(url);
+  sendToServer(text);
 }
 
-function redirect(url) {
-  if (window.opener && !window.opener.closed) {
-    window.opener.location.href = url;
-    window.close();
+// ===== CALL GAS =====
+function sendToServer(qr) {
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({ qr })
+  })
+    .then(res => res.json())
+    .then(showResult)
+    .catch(() => {
+      setStatus("Lỗi mạng", "err");
+      resetScan();
+    });
+}
+
+// ===== UI RESULT =====
+function showResult(data) {
+  const box = document.getElementById("lastScan");
+
+  if (data.status === "success") {
+    setStatus("✔ Check-in thành công", "ok");
+
+    box.innerHTML = `
+      👤 ${data.name}<br>
+      🎫 ${data.package}<br>
+      ⏳ ${data.expire}
+    `;
+
+    successSound();
+
   } else {
-    window.location.href = url;
+    setStatus("❌ " + data.message, "err");
+
+    box.innerHTML = `
+      ⚠️ ${data.message}<br>
+      🔎 ${data.qr || ""}
+    `;
+
+    errorSound();
   }
+
+  setTimeout(resetScan, 1200);
 }
 
+// ===== RESET =====
+function resetScan() {
+  isProcessing = false;
+  setStatus("Sẵn sàng quét", "ok");
+  document.querySelector(".scan-line").style.display = "block";
+}
+
+// ===== UI =====
 function setStatus(msg, type) {
   const el = document.getElementById("statusMsg");
   el.innerText = msg;
   el.className = "font-bold text-lg " + type;
 }
 
+// ===== SOUND =====
 function beep() {
-  new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play();
-  if (navigator.vibrate) navigator.vibrate(100);
+  if (navigator.vibrate) navigator.vibrate(50);
 }
 
-// switch camera thủ công
-document.getElementById("cameraSelect").addEventListener("change", async (e) => {
-  await html5QrCode.stop();
-  await html5QrCode.start(e.target.value, { fps: 15 }, onScan);
-});
+function successSound() {
+  new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg").play();
+}
+
+function errorSound() {
+  new Audio("https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg").play();
+}
 </script>
 
 </body>
