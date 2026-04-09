@@ -12,56 +12,16 @@
 <style>
 body { background: #020617; font-family: 'Inter', sans-serif; }
 
-#reader { width: 100%; height: 100%; position: relative; }
+#reader {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
 #reader video {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover;
-}
-
-.scan-frame {
-  position: absolute;
-  width: 58%;
-  height: 58%;
-  border: 3px solid #22c55e;
-  border-radius: 20px;
-  box-shadow: 0 0 25px rgba(34,197,94,0.5);
-}
-
-.corner {
-  position: absolute;
-  width: 25px;
-  height: 25px;
-  border: 4px solid #22c55e;
-}
-
-.corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
-.corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
-.corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
-.corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
-
-.scan-line {
-  position: absolute;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg,#22c55e,#bbf7d0);
-  animation: scan 1.8s linear infinite;
-}
-
-@keyframes scan {
-  0% { top: 5%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { top: 95%; opacity: 0; }
-}
-
-.overlay {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, rgba(15,23,42,0.1), rgba(15,23,42,0.9));
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .status-bar {
@@ -80,16 +40,6 @@ body { background: #020617; font-family: 'Inter', sans-serif; }
 
 <div class="relative flex-1">
   <div id="reader"></div>
-
-  <div class="overlay">
-    <div class="scan-frame">
-      <div class="corner tl"></div>
-      <div class="corner tr"></div>
-      <div class="corner bl"></div>
-      <div class="corner br"></div>
-      <div class="scan-line"></div>
-    </div>
-  </div>
 </div>
 
 <div class="status-bar p-3 space-y-2">
