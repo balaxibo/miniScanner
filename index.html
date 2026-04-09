@@ -25,10 +25,15 @@
             </div>
             <div>
                 <h1 class="font-extrabold text-xl tracking-tight">ALY GYM</h1>
-                <p class="text-[10px] text-green-400 font-bold uppercase tracking-widest">Standalone Mode</p>
+                <p class="text-[10px] text-green-400 font-bold uppercase tracking-widest">Mini Scanner</p>
             </div>
         </div>
-        <button onclick="location.reload()" class="glass p-3 rounded-xl"><i class="fas fa-sync-alt text-gray-400"></i></button>
+        <div class="flex items-center gap-2">
+            <button id="aptModeBtn" onclick="toggleAptMode()" class="glass px-3 py-2 rounded-xl text-[10px] uppercase tracking-widest text-green-300">
+                APT: PT
+            </button>
+            <button onclick="location.reload()" class="glass p-3 rounded-xl"><i class="fas fa-sync-alt text-gray-400"></i></button>
+        </div>
     </header>
 
     <main id="scannerSection" class="flex-1 flex flex-col gap-6">
@@ -67,16 +72,27 @@
     <script>
         let html5QrCode = null;
         let isProcessing = false;
-        let RETURN_URL = null;
+        let API_BASE = null;
+        let lastCode = null;
+        let lastScanTime = 0;
+        let aptMode = 'PT';
 
         window.onload = () => {
             const params = new URLSearchParams(window.location.search);
             const ret = params.get('return');
             if (ret && ret.trim() !== '') {
-                RETURN_URL = ret;
+                API_BASE = ret.split('?')[0];
             }
             initScanner();
         };
+
+        function toggleAptMode() {
+            aptMode = aptMode === 'PT' ? 'OutOfHours' : 'PT';
+            const btn = document.getElementById('aptModeBtn');
+            if (btn) {
+                btn.textContent = 'APT: ' + (aptMode === 'PT' ? 'PT' : 'Ngoài giờ');
+            }
+        }
 
         async function initScanner() {
             try {
@@ -86,7 +102,7 @@
                     return;
                 }
                 const select = document.getElementById('cameraSelect');
-                select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label}</option>`).join('');
+                select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label || d.id}</option>`).join('');
                 html5QrCode = new Html5Qrcode("reader");
                 const ua = navigator.userAgent || '';
                 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
@@ -111,37 +127,61 @@
         }
 
         function onScanSuccess(decodedText) {
-            if (isProcessing) return;
+            const now = Date.now();
             const code = decodedText.trim().toUpperCase();
+            if (code === lastCode && now - lastScanTime < 3000) {
+                return;
+            }
+            lastCode = code;
+            lastScanTime = now;
+            if (isProcessing) return;
             if (!/^(AG|APT)\d+$/i.test(code)) {
                 document.getElementById('statusMsg').innerText = 'Mã không hợp lệ: ' + code;
                 return;
             }
-            if (!RETURN_URL) {
-                showResult({ status: 'error', message: 'Thiếu tham số return trong URL. Hãy mở scanner từ hệ thống ALY GYM.' });
+            if (!API_BASE) {
+                showResult({ status: 'error', message: 'Thiếu cấu hình API. Hãy mở scanner từ hệ thống ALY GYM.', studentId: code });
                 return;
             }
             isProcessing = true;
             if (navigator.vibrate) navigator.vibrate(100);
-            document.getElementById('statusMsg').innerText = 'Đã đọc mã: ' + code + ' - Đang chuyển về hệ thống...';
+            const trainingType = code.indexOf('APT') === 0 ? aptMode : 'NonPT';
+            document.getElementById('statusMsg').innerText = 'Đã đọc: ' + code + ' - đang xử lý...';
+            callApi(code, trainingType);
+        }
 
-            const sep = RETURN_URL.includes('?') ? '&' : '?';
-            const target = RETURN_URL + sep + 'qr=' + encodeURIComponent(code);
-
-            const navigateBack = () => {
+        function callApi(code, trainingType) {
+            const cbName = 'handleApi_' + Date.now();
+            window[cbName] = data => {
                 try {
-                    if (window.opener && !window.opener.closed) {
-                        window.opener.location.href = target;
-                        window.close();
-                    } else {
-                        window.location.href = target;
-                    }
-                } catch (e) {
-                    window.location.href = target;
+                    handleApiResult(code, trainingType, data);
+                } finally {
+                    delete window[cbName];
+                    isProcessing = false;
                 }
             };
+            const url = API_BASE +
+              '?mode=api' +
+              '&code=' + encodeURIComponent(code) +
+              '&trainingType=' + encodeURIComponent(trainingType) +
+              '&callback=' + encodeURIComponent(cbName) +
+              '&ts=' + Date.now();
+            const s = document.createElement('script');
+            s.src = url;
+            s.onerror = () => {
+                showResult({ status: 'error', message: 'Không kết nối được máy chủ.', studentId: code });
+                isProcessing = false;
+            };
+            document.body.appendChild(s);
+        }
 
-            html5QrCode.stop().then(navigateBack).catch(navigateBack);
+        function handleApiResult(code, trainingType, res) {
+            if (!res || typeof res !== 'object') {
+                showResult({ status: 'error', message: 'Dữ liệu không hợp lệ', studentId: code });
+                return;
+            }
+            const merged = Object.assign({ studentId: code, trainingType: trainingType }, res);
+            showResult(merged);
         }
 
         function showResult(res) {
@@ -164,8 +204,15 @@
             }
 
             name.innerText = res.fullName || '';
-            details.innerHTML = `<p class="text-center text-sm">${res.message || ''}</p>
-                                <p class="text-center text-xs text-gray-500 mt-2">Mã HV: ${res.studentId || '---'}</p>`;
+            const statusCard = res.isExpired ? 'Hết hạn' : 'Còn hạn';
+            const statusColor = res.isExpired ? 'text-red-400' : 'text-green-400';
+            details.innerHTML =
+              `<p class="text-center text-sm">${res.message || ''}</p>` +
+              `<p class="text-center text-xs text-gray-500 mt-2">Mã HV: ${res.studentId || '---'}</p>` +
+              `<p class="text-center text-xs mt-1">Gói: ${res.packageCode || ''}</p>` +
+              `<p class="text-center text-xs mt-1">Buổi còn lại: ${res.remainingSessions != null ? res.remainingSessions : ''}</p>` +
+              `<p class="text-center text-xs mt-1">Hạn: ${res.endDate || ''}</p>` +
+              `<p class="text-center text-xs mt-1 ${statusColor}">Trạng thái thẻ: ${statusCard}</p>`;
 
             modal.classList.replace('opacity-0', 'opacity-100');
             modal.classList.replace('pointer-events-none', 'pointer-events-auto');
