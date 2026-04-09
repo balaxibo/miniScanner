@@ -12,18 +12,6 @@
 <style>
 body { background: #020617; font-family: 'Inter', sans-serif; }
 
-#reader {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-#reader video {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover;
-}
-
 .status-bar {
   background: #020617;
   border-top: 1px solid #1e293b;
@@ -38,8 +26,8 @@ body { background: #020617; font-family: 'Inter', sans-serif; }
 
 <body class="flex flex-col h-screen">
 
-<div class="relative flex-1">
-  <div id="reader"></div>
+<div class="relative w-full" style="height: 55vh">
+  <div id="reader" class="w-full h-full"></div>
 </div>
 
 <div class="status-bar p-3 space-y-2">
@@ -98,7 +86,17 @@ async function init() {
       `<option value="${d.id}">${d.label || d.id}</option>`
     ).join("");
     if (devices && devices.length > 0) {
-      currentCameraId = devices[0].id;
+      const ua = navigator.userAgent || "";
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+      let preferred = devices.find(d => {
+        const label = (d.label || "").toLowerCase();
+        return label.includes("back") || label.includes("rear");
+      });
+      if (!preferred && isMobile && devices.length > 1) {
+        preferred = devices[devices.length - 1];
+      }
+      currentCameraId = (preferred || devices[0]).id;
+      select.value = currentCameraId;
     }
     setScanButtonState();
     setStatus("Nhấn BẬT CAMERA để quét", "processing");
@@ -113,9 +111,13 @@ async function startScanner(cameraId) {
       fps: 15,
       qrbox: { width: 220, height: 220 }
     };
-    const camId = cameraId || currentCameraId;
+    let camId = cameraId || currentCameraId;
     if (camId) {
-      await html5QrCode.start(camId, config, onScan);
+      try {
+        await html5QrCode.start(camId, config, onScan);
+      } catch (e) {
+        await html5QrCode.start({ facingMode: "environment" }, config, onScan);
+      }
     } else {
       await html5QrCode.start({ facingMode: "environment" }, config, onScan);
     }
