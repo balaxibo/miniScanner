@@ -96,12 +96,15 @@ body { background: #020617; font-family: 'Inter', sans-serif; }
   <div class="flex justify-between items-center">
     <div>
       <div class="text-xs text-gray-400">TRẠNG THÁI</div>
-      <div id="statusMsg" class="font-bold text-lg ok">Đang khởi động...</div>
+      <div id="statusMsg" class="font-bold text-xl ok">Đang khởi động...</div>
     </div>
     <select id="cameraSelect" class="bg-gray-800 text-white text-xs px-3 py-2 rounded-md"></select>
   </div>
   <div class="flex justify-between items-center gap-2">
-    <button id="aptModeBtn" class="flex-1 bg-gray-900 text-[11px] text-emerald-300 px-3 py-2 rounded-md border border-emerald-500/40">
+    <button id="scanToggleBtn" class="flex-1 bg-emerald-600 text-[11px] text-white px-3 py-2 rounded-md font-bold">
+      BẬT CAMERA QUÉT QR
+    </button>
+    <button id="aptModeBtn" class="bg-gray-900 text-[11px] text-emerald-300 px-3 py-2 rounded-md border border-emerald-500/40">
       APT: PT
     </button>
     <button id="backBtn" class="bg-gray-900 text-[11px] text-gray-300 px-3 py-2 rounded-md border border-gray-600/60">
@@ -121,6 +124,8 @@ let lastTime = 0;
 let API_BASE = null;
 let aptMode = "PT";
 let fullReturnUrl = null;
+let isScanning = false;
+let currentCameraId = null;
 
 window.addEventListener("load", init);
 
@@ -142,9 +147,11 @@ async function init() {
     select.innerHTML = devices.map(d =>
       `<option value="${d.id}">${d.label || d.id}</option>`
     ).join("");
-
-    await startScanner();
-    setStatus("Sẵn sàng quét", "ok");
+    if (devices && devices.length > 0) {
+      currentCameraId = devices[0].id;
+    }
+    setScanButtonState();
+    setStatus("Nhấn BẬT CAMERA để quét", "processing");
   } catch (err) {
     setStatus("Lỗi camera: " + err.message, "err");
   }
@@ -156,11 +163,15 @@ async function startScanner(cameraId) {
       fps: 15,
       qrbox: { width: 220, height: 220 }
     };
-    if (cameraId) {
-      await html5QrCode.start(cameraId, config, onScan);
+    const camId = cameraId || currentCameraId;
+    if (camId) {
+      await html5QrCode.start(camId, config, onScan);
     } else {
       await html5QrCode.start({ facingMode: "environment" }, config, onScan);
     }
+    isScanning = true;
+    setScanButtonState();
+    setStatus("Đưa mã QR vào khung để quét...", "ok");
   } catch (err) {
     const devices = await Html5QrCode.getCameras();
     if (devices && devices.length > 0) {
@@ -171,16 +182,39 @@ async function startScanner(cameraId) {
   }
 }
 
+async function stopScanner(auto = false) {
+  if (!html5QrCode || !isScanning) return;
+  try {
+    await html5QrCode.stop();
+  } catch (e) {}
+  isScanning = false;
+  setScanButtonState();
+  if (!auto) {
+    setStatus("Đã tắt camera", "processing");
+  }
+}
+
 async function switchCamera(id) {
   if (!html5QrCode) return;
   try {
     await html5QrCode.stop();
   } catch (e) {}
-  await startScanner(id);
+  currentCameraId = id;
+  if (isScanning) {
+    await startScanner(id);
+  }
 }
 
 document.getElementById("cameraSelect").addEventListener("change", function (e) {
   switchCamera(e.target.value);
+});
+
+document.getElementById("scanToggleBtn").addEventListener("click", async function () {
+  if (isScanning) {
+    await stopScanner(false);
+  } else {
+    await startScanner();
+  }
 });
 
 document.getElementById("aptModeBtn").addEventListener("click", function () {
@@ -296,6 +330,7 @@ function handleResult(code, res) {
   info.push("Thẻ: " + (expired ? "Hết hạn" : "Còn hạn"));
 
   document.getElementById("lastScan").innerText = info.join(" | ");
+  stopScanner(true);
 }
 
 function setStatus(msg, type) {
