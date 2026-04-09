@@ -108,125 +108,181 @@ let html5QrCode;
 let isProcessing = false;
 let lastQR = "";
 let lastTime = 0;
+let API_BASE = null;
 
-// 🔥 API GAS (THAY LINK CỦA BẠN)
-const API_URL = "https://script.google.com/macros/s/AKfycbyCHuK3vgm301o_atx3nkPXiEyKU6Bru8zSAV515m97AZrZptDqtQmtEEydUE3jQ-qb/exec";
+window.addEventListener("load", init);
 
-window.onload = async () => {
-  await init();
-};
-
-// ===== INIT =====
 async function init() {
+  const params = new URLSearchParams(location.search);
+  const ret = params.get("return");
+  API_BASE = ret ? decodeURIComponent(ret).split("?")[0] : null;
+
+  if (!API_BASE) {
+    setStatus("Thiếu return URL", "err");
+    return;
+  }
+
   try {
     html5QrCode = new Html5Qrcode("reader");
+    const devices = await Html5Qrcode.getCameras();
+    const select = document.getElementById("cameraSelect");
+    select.innerHTML = devices.map(d =>
+      `<option value="${d.id}">${d.label || d.id}</option>`
+    ).join("");
 
-    await html5QrCode.start(
-      { facingMode: "environment" },
-      {
-        fps: 25, // ⚡ tăng tốc
-        qrbox: { width: 200, height: 200 },
-        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] // 🔥 chỉ QR → nhanh hơn
-      },
-      onScan
-    );
-
+    await startScanner();
     setStatus("Sẵn sàng quét", "ok");
-
   } catch (err) {
     setStatus("Lỗi camera: " + err.message, "err");
   }
 }
 
-// ===== SCAN =====
+async function startScanner(cameraId) {
+  try {
+    const config = {
+      fps: 15,
+      qrbox: { width: 220, height: 220 }
+    };
+    if (cameraId) {
+      await html5QrCode.start(cameraId, config, onScan);
+    } else {
+      await html5QrCode.start({ facingMode: "environment" }, config, onScan);
+    }
+  } catch (err) {
+    const devices = await Html5QrCode.getCameras();
+    if (devices && devices.length > 0) {
+      await html5QrCode.start(devices[0].id, { fps: 10 }, onScan);
+    } else {
+      setStatus("Không tìm thấy camera", "err");
+    }
+  }
+}
+
+async function switchCamera(id) {
+  if (!html5QrCode) return;
+  try {
+    await html5QrCode.stop();
+  } catch (e) {}
+  await startScanner(id);
+}
+
+document.getElementById("cameraSelect").addEventListener("change", function (e) {
+  switchCamera(e.target.value);
+});
+
 function onScan(text) {
   const now = Date.now();
+  const code = String(text || "").trim().toUpperCase();
 
-  if (isProcessing || (text === lastQR && now - lastTime < 700)) return;
+  if (isProcessing) return;
+  if (code === lastQR && now - lastTime < 1500) return;
 
-  lastQR = text;
+  if (!/^(AG|APT)\d+$/i.test(code)) {
+    setStatus("Mã không hợp lệ: " + code, "err");
+    document.getElementById("lastScan").innerText = code;
+    return;
+  }
+
+  lastQR = code;
   lastTime = now;
   isProcessing = true;
 
-  // ⚡ tắt animation → tăng FPS thực
-  document.querySelector(".scan-line").style.display = "none";
-
   beep();
-  setStatus("Đang kiểm tra...", "processing");
+  setStatus("Đang xử lý " + code + "...", "processing");
+  document.getElementById("lastScan").innerText = code;
 
-  document.getElementById("lastScan").innerText = text;
-
-  sendToServer(text);
-}
-
-// ===== CALL GAS =====
-function sendToServer(qr) {
-  fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify({ qr })
-  })
-    .then(res => res.json())
-    .then(showResult)
-    .catch(() => {
-      setStatus("Lỗi mạng", "err");
-      resetScan();
-    });
-}
-
-// ===== UI RESULT =====
-function showResult(data) {
-  const box = document.getElementById("lastScan");
-
-  if (data.status === "success") {
-    setStatus("✔ Check-in thành công", "ok");
-
-    box.innerHTML = `
-      👤 ${data.name}<br>
-      🎫 ${data.package}<br>
-      ⏳ ${data.expire}
-    `;
-
-    successSound();
-
-  } else {
-    setStatus("❌ " + data.message, "err");
-
-    box.innerHTML = `
-      ⚠️ ${data.message}<br>
-      🔎 ${data.qr || ""}
-    `;
-
-    errorSound();
+  if (!API_BASE) {
+    setStatus("Thiếu API_BASE", "err");
+    isProcessing = false;
+    return;
   }
 
-  setTimeout(resetScan, 1200);
+  let trainingType = "NonPT";
+  if (/^APT/i.test(code)) {
+    trainingType = "PT";
+  }
+
+  callApi(code, trainingType);
 }
 
-// ===== RESET =====
-function resetScan() {
-  isProcessing = false;
-  setStatus("Sẵn sàng quét", "ok");
-  document.querySelector(".scan-line").style.display = "block";
+function callApi(code, trainingType) {
+  const cbName = "handle_" + Date.now();
+  window[cbName] = function (res) {
+    try {
+      handleResult(code, res);
+    } finally {
+      delete window[cbName];
+      setTimeout(function () {
+        isProcessing = false;
+      }, 400);
+    }
+  };
+
+  const url = API_BASE
+    + "?mode=api"
+    + "&code=" + encodeURIComponent(code)
+    + "&trainingType=" + encodeURIComponent(trainingType)
+    + "&callback=" + encodeURIComponent(cbName)
+    + "&ts=" + Date.now();
+
+  const s = document.createElement("script");
+  s.src = url;
+  s.onerror = function () {
+    setStatus("Không kết nối được máy chủ", "err");
+    isProcessing = false;
+  };
+  document.body.appendChild(s);
 }
 
-// ===== UI =====
+function handleResult(code, res) {
+  if (!res || typeof res !== "object") {
+    setStatus("Dữ liệu không hợp lệ", "err");
+    return;
+  }
+
+  const name = res.fullName || "";
+  const pkg = res.packageCode || "";
+  const remain = res.remainingSessions != null ? res.remainingSessions : "";
+  const endDate = res.endDate || "";
+  const expired = !!res.isExpired;
+  const status = res.status || "";
+  const msg = res.message || "";
+
+  let line = msg;
+  if (status === "success") {
+    setStatus("✅ " + name, "ok");
+  } else if (status === "info") {
+    setStatus("ℹ️ " + msg, "processing");
+  } else {
+    setStatus(msg || "Lỗi", "err");
+  }
+
+  const info = [];
+  info.push("Mã: " + code);
+  if (name) info.push("Tên: " + name);
+  if (pkg) info.push("Gói: " + pkg);
+  if (remain !== "") info.push("Buổi còn: " + remain);
+  if (endDate) info.push("Hạn: " + endDate);
+  info.push("Thẻ: " + (expired ? "Hết hạn" : "Còn hạn"));
+
+  document.getElementById("lastScan").innerText = info.join(" | ");
+}
+
 function setStatus(msg, type) {
   const el = document.getElementById("statusMsg");
   el.innerText = msg;
-  el.className = "font-bold text-lg " + type;
+  let cls = "font-bold text-lg ";
+  if (type === "ok") cls += "ok";
+  else if (type === "err") cls += "err";
+  else cls += "processing";
+  el.className = cls;
 }
 
-// ===== SOUND =====
 function beep() {
-  if (navigator.vibrate) navigator.vibrate(50);
-}
-
-function successSound() {
-  new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg").play();
-}
-
-function errorSound() {
-  new Audio("https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg").play();
+  try {
+    new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play();
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(80);
 }
 </script>
 
