@@ -164,14 +164,15 @@ async function init() {
   start(cameraId);
 }
 
-async function start(id) {
+async function start() {
   await html5QrCode.start(
-    id,
-    { fps: 10, qrbox: 250 },
+    { facingMode: "environment" },
+    {
+      fps: 20,
+      qrbox: { width: 220, height: 220 }
+    },
     onScan
   );
-
-  setStatus("Sẵn sàng quét", "ok");
 }
 
 function onScan(text) {
@@ -179,7 +180,7 @@ function onScan(text) {
 
   if (
     isProcessing ||
-    (text === lastQR && now - lastTime < 2000)
+    (text === lastQR && now - lastTime < 800)
   ) return;
 
   lastQR = text;
@@ -199,19 +200,16 @@ function onScan(text) {
 
   // 🔥 FIX encode QR
   const url = RETURN_URL + (RETURN_URL.includes("?") ? "&" : "?") + "qr=" + encodeURIComponent(text);
-
-  setTimeout(() => {
-
-    // 🔥 FIX redirect chuẩn
-    if (window.opener && !window.opener.closed) {
-      window.opener.location.href = url;
-      window.close();
-    } else {
-      window.location.href = url;
-    }
-
-  }, 500);
+  function redirect(url) {
+  if (window.opener && !window.opener.closed) {
+    window.opener.location.href = url;
+    window.close();
+  } else {
+    window.location.href = url;
+  }
 }
+
+  redirect(url);
 
 function setStatus(msg, type) {
   const el = document.getElementById("statusMsg");
